@@ -1,17 +1,20 @@
 module.exports = {
   prefix: process.env.PREFIX || '!',
-  embedColor: '#5865F2', // Discord Blurple
-  footer: 'Made by Izzy | Coders Planet',
+  embedColor: '#FE9F04', // Defender Orange
+  footer: 'Powered by Defender • If you want Support Team Supervisor, DM them • Status: Powered by Triple Blocks Corporation',
+  
   statusMessages: {
-    online: 'DM me to create a ticket!',
-    idle: 'Watching for new ModMail tickets'
+    online: 'DM me to create a Defender Support ticket!',
+    idle: 'Watching for new Defender Support tickets'
   },
+
   cooldowns: {
     commands: 3, // cooldown in seconds for normal commands
     newTicket: 60, // cooldown in seconds for creating a new ticket
     ticketMessage: 2, // cooldown in seconds between messages in an existing ticket
-    staffResponse: 1 // cooldown in seconds for staff responses
+    staffResponse: 1 // cooldown in seconds for Support Team responses
   },
+
   ticketSettings: {
     closeConfirmation: true, // require confirmation before closing a ticket
     transcripts: true, // save ticket transcripts
@@ -22,8 +25,9 @@ module.exports = {
       inactiveHours: 72 // close tickets inactive for this many hours
     }
   },
+
   credits: {
-    name: 'Izzy | Coders Planet',
-    website: 'https://discord.gg/codersplanet'
+    name: 'Powered by Defender | Triple Blocks Corporation',
+    website: '' // no website provided
   }
-}; 
+};
