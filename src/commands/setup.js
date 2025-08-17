@@ -1,8 +1,12 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const SetupHandler = require('../utils/setup/setupHandler');
 const SetupUIManager = require('../utils/setup/setupUIManager');
 const logger = require('../utils/logger');
 const Config = require('../schemas/Config');
+
+const ORANGE_COLOR = '#FE9F04';
+const BANNER_URL = 'https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png';
+const FOOTER_TEXT = 'Powered by Triple Blocks Corporation • If you face problems, please contact the Support Team Supervisor.';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,10 +19,15 @@ module.exports = {
     const setupResult = await SetupHandler.initSetup(interaction);
     
     if (!setupResult.success) {
-      return interaction.reply({ 
-        content: setupResult.error || 'Failed to initialize setup. Please try again.',
-        ephemeral: true 
-      });
+      const errorEmbed = new EmbedBuilder()
+        .setColor(ORANGE_COLOR)
+        .setTitle('Setup Failed')
+        .setDescription(setupResult.error || 'Failed to initialize setup. Please try again.')
+        .setImage(BANNER_URL)
+        .setFooter({ text: FOOTER_TEXT })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
     }
     
     // Setup successful, we'll track the setup session
@@ -36,76 +45,68 @@ module.exports = {
     // Handle button and select menu interactions
     collector.on('collect', async (i) => {
       try {
-        // Process the interaction based on its type
         if (i.isButton()) {
           const result = await SetupHandler.handleButtonInteraction(i, session.guildConfig);
-          
-          // Update session with result
           session = { ...session, ...result };
-          
-          // If setup is no longer active, end the collector
-          if (!session.active) {
-            collector.stop('completed');
-          }
-        }
-        // Handle select menu interactions
-        else if (i.isStringSelectMenu()) {
+          if (!session.active) collector.stop('completed');
+        } else if (i.isStringSelectMenu()) {
           const result = await handleSelectMenuInteraction(i, session.guildConfig);
-          
-          // Update session with result
           session = { ...session, ...result };
         }
       } catch (error) {
         logger.error('Error in setup command collector:', error);
-        await i.reply({ 
-          content: 'An error occurred while processing your request. Please try again.',
-          ephemeral: true 
-        });
+        const errorEmbed = new EmbedBuilder()
+          .setColor(ORANGE_COLOR)
+          .setTitle('Error')
+          .setDescription('An error occurred while processing your request. Please try again.')
+          .setImage(BANNER_URL)
+          .setFooter({ text: FOOTER_TEXT })
+          .setTimestamp();
+
+        await i.reply({ embeds: [errorEmbed], ephemeral: true });
       }
     });
     
     // Handle collector end
     collector.on('end', (collected, reason) => {
       if (reason === 'idle') {
-        interaction.followUp({ 
-          content: 'Setup timed out due to inactivity. Your changes have been saved. Use `/setup` again to continue configuring the system.',
-          ephemeral: true 
-        });
+        const timeoutEmbed = new EmbedBuilder()
+          .setColor(ORANGE_COLOR)
+          .setTitle('Setup Timed Out')
+          .setDescription('Setup timed out due to inactivity. Your changes have been saved. Use `/setup` again to continue configuring the system.')
+          .setImage(BANNER_URL)
+          .setFooter({ text: FOOTER_TEXT })
+          .setTimestamp();
+
+        interaction.followUp({ embeds: [timeoutEmbed], ephemeral: true });
       }
     });
     
     // Set up a listener for modal submissions
     const modalFilter = i => i.user.id === interaction.user.id && i.customId.startsWith('modal_');
-    
-    // Create a unique listener name for this setup session
     const listenerName = `setupModalListener_${Date.now()}_${interaction.user.id}`;
     
-    // This will listen for modal submissions for the duration of the setup session
     const modalHandler = async (i) => {
-      // Skip if not a modal or not from the current user or not a setup modal
       if (!i.isModalSubmit() || !modalFilter(i) || i.replied || i.deferred) return;
-      
       try {
-        // Mark the interaction as being handled by this specific setup session
         i._setupHandled = true;
-        
-        // Handle the modal submission
         const result = await SetupHandler.handleModalSubmit(i, session.guildConfig);
-        
-        // Update session with result
         if (result && Object.keys(result).length > 0) {
           session = { ...session, ...result };
         }
       } catch (error) {
         logger.error('Error handling modal submission in setup command:', error);
-        
-        // Try to notify the user if we haven't replied yet
         try {
           if (!i.replied && !i.deferred) {
-            await i.reply({ 
-              content: 'An error occurred while processing your setup request. Please try again.',
-              ephemeral: true 
-            });
+            const errorEmbed = new EmbedBuilder()
+              .setColor(ORANGE_COLOR)
+              .setTitle('Error')
+              .setDescription('An error occurred while processing your setup request. Please try again.')
+              .setImage(BANNER_URL)
+              .setFooter({ text: FOOTER_TEXT })
+              .setTimestamp();
+
+            await i.reply({ embeds: [errorEmbed], ephemeral: true });
           }
         } catch (replyError) {
           logger.error('Error sending error notification to user:', replyError);
@@ -113,10 +114,7 @@ module.exports = {
       }
     };
     
-    // Add the listener
     interaction.client.on('interactionCreate', modalHandler);
-    
-    // Remove the listener when the collector ends
     collector.on('end', () => {
       interaction.client.removeListener('interactionCreate', modalHandler);
       logger.debug(`Removed setup modal listener: ${listenerName}`);
@@ -124,50 +122,35 @@ module.exports = {
   }
 };
 
-/**
- * Handle select menu interactions for setup
- * @param {Object} interaction - The select menu interaction
- * @param {Object} guildConfig - Current guild config
- * @returns {Promise<Object>} Updated session data
- */
 async function handleSelectMenuInteraction(interaction, guildConfig) {
   const { customId, values } = interaction;
   const selectedValue = values[0];
   
   try {
-    // Color selection
     if (customId === 'color_select') {
       await Config.findOneAndUpdate(
         { guildId: guildConfig.guildId },
         { $set: { 'settings.appearance.embedColor': selectedValue } },
         { new: true }
       );
-      
       const updatedConfig = await Config.findOne({ guildId: guildConfig.guildId });
       await interaction.update(SetupUIManager.getAppearanceSettingsEmbed(updatedConfig));
       return { guildConfig: updatedConfig, step: 'appearance' };
     }
-    
-    // Ticket limit selection
     else if (customId === 'ticket_limit_select') {
       const limit = parseInt(selectedValue);
-      
       await Config.findOneAndUpdate(
         { guildId: guildConfig.guildId },
         { $set: { 'settings.tickets.maxOpenTickets': limit } },
         { new: true }
       );
-      
       const updatedConfig = await Config.findOne({ guildId: guildConfig.guildId });
       await interaction.update(SetupUIManager.getTicketSettingsEmbed(updatedConfig));
       return { guildConfig: updatedConfig, step: 'tickets' };
     }
-    
-    // Auto-close time selection
     else if (customId === 'auto_close_select') {
       const hours = parseInt(selectedValue);
       const isEnabled = hours > 0;
-      
       await Config.findOneAndUpdate(
         { guildId: guildConfig.guildId },
         { 
@@ -178,21 +161,22 @@ async function handleSelectMenuInteraction(interaction, guildConfig) {
         },
         { new: true }
       );
-      
       const updatedConfig = await Config.findOne({ guildId: guildConfig.guildId });
       await interaction.update(SetupUIManager.getTicketSettingsEmbed(updatedConfig));
       return { guildConfig: updatedConfig, step: 'tickets' };
     }
-    
-    // Default case - just return current session data
     return {};
-    
   } catch (error) {
     logger.error(`Error handling select menu ${customId}:`, error);
-    await interaction.reply({
-      content: 'An error occurred while processing your selection. Please try again.',
-      ephemeral: true
-    });
+    const errorEmbed = new EmbedBuilder()
+      .setColor(ORANGE_COLOR)
+      .setTitle('Error')
+      .setDescription('An error occurred while processing your selection. Please try again.')
+      .setImage(BANNER_URL)
+      .setFooter({ text: FOOTER_TEXT })
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
     return { error: error.message };
   }
-} 
+}
