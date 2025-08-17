@@ -1,88 +1,73 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const SetupHandler = require('../utils/setup/setupHandler');
 const SetupUIManager = require('../utils/setup/setupUIManager');
 const logger = require('../utils/logger');
 const Config = require('../schemas/Config');
 
-const ORANGE_COLOR = '#FE9F04';
-const BANNER_URL = 'https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png';
-const FOOTER_TEXT = 'Powered by Triple Blocks Corporation • If you face problems, please contact the Support Team Supervisor.';
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup')
-    .setDescription('Configure the ModMail system for your server')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('Configure the Defender Support system for your server'),
   
   async execute(interaction) {
+    // Restrict command to the guild owner only
+    if (interaction.user.id !== interaction.guild.ownerId) {
+      return interaction.reply({
+        content: '❌ Only the **Server Owner** can run this command.',
+        ephemeral: true
+      });
+    }
+
     // Initialize setup session
     const setupResult = await SetupHandler.initSetup(interaction);
     
     if (!setupResult.success) {
-      const errorEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Setup Failed')
-        .setDescription(setupResult.error || 'Failed to initialize setup. Please try again.')
-        .setImage(BANNER_URL)
-        .setFooter({ text: FOOTER_TEXT })
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+      return interaction.reply({ 
+        content: setupResult.error || 'Failed to initialize setup. Please try again.',
+        ephemeral: true 
+      });
     }
     
-    // Setup successful, we'll track the setup session
     let session = setupResult;
-    
-    // Create a collector for button interactions
     const message = setupResult.setupMessage;
+
+    // Collector for setup buttons & menus
     const filter = i => i.user.id === interaction.user.id;
-    
     const collector = message.createMessageComponentCollector({
       filter,
-      idle: 300000 // 5 minute idle timeout
+      idle: 300000 // 5 min idle timeout
     });
     
-    // Handle button and select menu interactions
     collector.on('collect', async (i) => {
       try {
         if (i.isButton()) {
           const result = await SetupHandler.handleButtonInteraction(i, session.guildConfig);
           session = { ...session, ...result };
           if (!session.active) collector.stop('completed');
-        } else if (i.isStringSelectMenu()) {
+        } 
+        else if (i.isStringSelectMenu()) {
           const result = await handleSelectMenuInteraction(i, session.guildConfig);
           session = { ...session, ...result };
         }
       } catch (error) {
         logger.error('Error in setup command collector:', error);
-        const errorEmbed = new EmbedBuilder()
-          .setColor(ORANGE_COLOR)
-          .setTitle('Error')
-          .setDescription('An error occurred while processing your request. Please try again.')
-          .setImage(BANNER_URL)
-          .setFooter({ text: FOOTER_TEXT })
-          .setTimestamp();
-
-        await i.reply({ embeds: [errorEmbed], ephemeral: true });
+        await i.reply({ 
+          content: '⚠️ An error occurred while processing your request. Please try again.',
+          ephemeral: true 
+        });
       }
     });
     
-    // Handle collector end
     collector.on('end', (collected, reason) => {
       if (reason === 'idle') {
-        const timeoutEmbed = new EmbedBuilder()
-          .setColor(ORANGE_COLOR)
-          .setTitle('Setup Timed Out')
-          .setDescription('Setup timed out due to inactivity. Your changes have been saved. Use `/setup` again to continue configuring the system.')
-          .setImage(BANNER_URL)
-          .setFooter({ text: FOOTER_TEXT })
-          .setTimestamp();
-
-        interaction.followUp({ embeds: [timeoutEmbed], ephemeral: true });
+        interaction.followUp({ 
+          content: '⌛ Setup timed out due to inactivity. Your changes have been saved. Use `/setup` again to continue configuring the system.',
+          ephemeral: true 
+        });
       }
     });
     
-    // Set up a listener for modal submissions
+    // Modal listener
     const modalFilter = i => i.user.id === interaction.user.id && i.customId.startsWith('modal_');
     const listenerName = `setupModalListener_${Date.now()}_${interaction.user.id}`;
     
@@ -98,15 +83,10 @@ module.exports = {
         logger.error('Error handling modal submission in setup command:', error);
         try {
           if (!i.replied && !i.deferred) {
-            const errorEmbed = new EmbedBuilder()
-              .setColor(ORANGE_COLOR)
-              .setTitle('Error')
-              .setDescription('An error occurred while processing your setup request. Please try again.')
-              .setImage(BANNER_URL)
-              .setFooter({ text: FOOTER_TEXT })
-              .setTimestamp();
-
-            await i.reply({ embeds: [errorEmbed], ephemeral: true });
+            await i.reply({ 
+              content: '⚠️ An error occurred while processing your setup request. Please try again.',
+              ephemeral: true 
+            });
           }
         } catch (replyError) {
           logger.error('Error sending error notification to user:', replyError);
@@ -122,6 +102,9 @@ module.exports = {
   }
 };
 
+/**
+ * Handle select menu interactions for setup
+ */
 async function handleSelectMenuInteraction(interaction, guildConfig) {
   const { customId, values } = interaction;
   const selectedValue = values[0];
@@ -130,7 +113,7 @@ async function handleSelectMenuInteraction(interaction, guildConfig) {
     if (customId === 'color_select') {
       await Config.findOneAndUpdate(
         { guildId: guildConfig.guildId },
-        { $set: { 'settings.appearance.embedColor': selectedValue } },
+        { $set: { 'settings.appearance.embedColor': '#FE9F04' } }, // force Defender Support orange
         { new: true }
       );
       const updatedConfig = await Config.findOne({ guildId: guildConfig.guildId });
@@ -166,17 +149,13 @@ async function handleSelectMenuInteraction(interaction, guildConfig) {
       return { guildConfig: updatedConfig, step: 'tickets' };
     }
     return {};
+    
   } catch (error) {
     logger.error(`Error handling select menu ${customId}:`, error);
-    const errorEmbed = new EmbedBuilder()
-      .setColor(ORANGE_COLOR)
-      .setTitle('Error')
-      .setDescription('An error occurred while processing your selection. Please try again.')
-      .setImage(BANNER_URL)
-      .setFooter({ text: FOOTER_TEXT })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+    await interaction.reply({
+      content: '⚠️ An error occurred while processing your selection. Please try again.',
+      ephemeral: true
+    });
     return { error: error.message };
   }
 }
