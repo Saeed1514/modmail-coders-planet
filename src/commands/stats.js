@@ -9,7 +9,7 @@ const ConfigManager = require('../utils/configManager');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('View statistics about ModMail tickets'),
+    .setDescription('View statistics about Defender Support tickets'),
   
   async execute(interaction) {
     // Get the server configuration
@@ -18,16 +18,16 @@ module.exports = {
     if (!guildConfig) {
       logger.error(`No configuration found for guild ${interaction.guild.id}`);
       return interaction.reply({
-        content: 'Error: Bot has not been set up. Please ask an administrator to run the /setup command.',
+        content: '⚠️ Error: Bot has not been set up. Please ask the **Server Owner** to run the `/setup` command.',
         ephemeral: true
       });
     }
     
-    // Check if user has staff role
-    const hasStaffRole = interaction.member.roles.cache.has(guildConfig.staffRoleId);
-    if (!hasStaffRole) {
+    // Check if user has Support Team role
+    const hasSupportRole = interaction.member.roles.cache.has(guildConfig.staffRoleId);
+    if (!hasSupportRole) {
       return interaction.reply({
-        content: `You do not have permission to view ticket statistics. You need the <@&${guildConfig.staffRoleId}> role.`,
+        content: `❌ You do not have permission to view ticket statistics. You need the <@&${guildConfig.staffRoleId}> (Support Team) role.`,
         ephemeral: true
       });
     }
@@ -35,39 +35,35 @@ module.exports = {
     await interaction.deferReply();
     
     try {
-      // Get ticket statistics
+      // Ticket counts
       const totalTickets = await Ticket.countDocuments({ guildId: interaction.guild.id });
       const openTickets = await Ticket.countDocuments({ guildId: interaction.guild.id, closed: false });
       const closedTickets = await Ticket.countDocuments({ guildId: interaction.guild.id, closed: true });
       
-      // Get the most recent tickets
+      // Most recent tickets
       const recentTickets = await Ticket.find({ guildId: interaction.guild.id })
         .sort({ createdAt: -1 })
         .limit(5);
       
-      // Get embed color from config
-      const embedColor = await ConfigManager.getSetting(
-        interaction.guild.id, 
-        'settings.appearance.embedColor',
-        config.embedColor
-      );
+      // Embed color (forced to Defender orange)
+      const embedColor = '#FE9F04';
 
-      // Create the embed
+      // Create the stats embed
       const statsEmbed = new EmbedBuilder()
         .setColor(embedColor)
-        .setTitle('📊 ModMail Statistics')
+        .setTitle('📊 Defender Support Statistics')
         .setDescription('Here are the latest ticket statistics for this server.')
-        .setThumbnail('https://i.imgur.com/ZfXh3XK.png') // Small emblem (you can change this link)
-        .setImage('https://i.imgur.com/2s8qXBt.png')     // Banner image (you can replace with your custom one)
+        .setThumbnail('https://i.imgur.com/ZfXh3XK.png') // small emblem placeholder
+        .setImage('https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png') // Defender banner
         .addFields(
           { name: 'Total Tickets', value: totalTickets.toString(), inline: true },
           { name: 'Open Tickets', value: openTickets.toString(), inline: true },
           { name: 'Closed Tickets', value: closedTickets.toString(), inline: true }
         )
-        .setFooter({ text: `${config.footer} • Statistics are refreshed live` })
+        .setFooter({ text: 'Powered by Defender • If you want Support Team Supervisor, DM them • Status: Powered by Triple Blocks Corporation' })
         .setTimestamp();
       
-      // Add recent tickets if there are any
+      // Add recent tickets if found
       if (recentTickets.length > 0) {
         let recentTicketsText = '';
         
@@ -83,7 +79,7 @@ module.exports = {
         statsEmbed.addFields({ name: '🕐 Recent Tickets', value: recentTicketsText });
       }
       
-      // Add average response time placeholder
+      // Placeholder for average response time
       if (closedTickets > 0) {
         statsEmbed.addFields({
           name: '⏱ Average Response Time',
@@ -95,7 +91,7 @@ module.exports = {
     } catch (error) {
       logger.error('Error getting statistics:', error);
       await interaction.editReply({ 
-        content: 'There was an error fetching ticket statistics.' 
+        content: '⚠️ There was an error fetching ticket statistics.' 
       });
     }
   }
