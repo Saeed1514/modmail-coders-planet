@@ -4,6 +4,7 @@ const Config = require('../schemas/Config');
 const config = require('../config/config');
 const moment = require('moment');
 const logger = require('../utils/logger');
+const ConfigManager = require('../utils/configManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -44,16 +45,26 @@ module.exports = {
         .sort({ createdAt: -1 })
         .limit(5);
       
+      // Get embed color from config
+      const embedColor = await ConfigManager.getSetting(
+        interaction.guild.id, 
+        'settings.appearance.embedColor',
+        config.embedColor
+      );
+
       // Create the embed
       const statsEmbed = new EmbedBuilder()
-        .setColor(config.embedColor)
-        .setTitle('ModMail Statistics')
+        .setColor(embedColor)
+        .setTitle('📊 ModMail Statistics')
+        .setDescription('Here are the latest ticket statistics for this server.')
+        .setThumbnail('https://i.imgur.com/ZfXh3XK.png') // Small emblem (you can change this link)
+        .setImage('https://i.imgur.com/2s8qXBt.png')     // Banner image (you can replace with your custom one)
         .addFields(
           { name: 'Total Tickets', value: totalTickets.toString(), inline: true },
           { name: 'Open Tickets', value: openTickets.toString(), inline: true },
           { name: 'Closed Tickets', value: closedTickets.toString(), inline: true }
         )
-        .setFooter({ text: config.footer })
+        .setFooter({ text: `${config.footer} • Statistics are refreshed live` })
         .setTimestamp();
       
       // Add recent tickets if there are any
@@ -69,15 +80,14 @@ module.exports = {
           recentTicketsText += `${status} - **${userName}** - ${time}\n`;
         }
         
-        statsEmbed.addFields({ name: 'Recent Tickets', value: recentTicketsText });
+        statsEmbed.addFields({ name: '🕐 Recent Tickets', value: recentTicketsText });
       }
       
-      // Add average response time if there are closed tickets
+      // Add average response time placeholder
       if (closedTickets > 0) {
-        // Dummy implementation - in a real bot, you'd calculate actual response times
         statsEmbed.addFields({
-          name: 'Average Response Time',
-          value: 'Feature coming soon'
+          name: '⏱ Average Response Time',
+          value: 'Feature coming soon...'
         });
       }
       
@@ -89,4 +99,4 @@ module.exports = {
       });
     }
   }
-}; 
+};
