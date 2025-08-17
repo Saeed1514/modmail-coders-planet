@@ -1,72 +1,46 @@
-const { 
-  SlashCommandBuilder, 
-  EmbedBuilder, 
-  ButtonBuilder, 
-  ButtonStyle, 
-  ActionRowBuilder 
-} = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const { closeTicket } = require('../utils/modmail');
 const Config = require('../schemas/Config');
 const ConfigManager = require('../utils/configManager');
 const config = require('../config/config');
 const logger = require('../utils/logger');
 
-// Theme constants
-const ORANGE_COLOR = '#FE9F04';
-const BANNER_URL = 'https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png';
-const FOOTER_TEXT = 'Powered by Triple Blocks Corporation • If you face problems, please contact the Support Team Supervisor.';
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('close')
-    .setDescription('Close the current ModMail ticket')
+    .setDescription('Close the current Defender Support ticket')
     .addStringOption(option => 
       option.setName('reason')
         .setDescription('Reason for closing the ticket')
-        .setRequired(false)
-    ),
+        .setRequired(false)),
   
   async execute(interaction) {
-    // Check if this is a modmail channel
-    if (!interaction.channel.name.startsWith('modmail-')) {
-      const wrongChannelEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Error')
-        .setDescription('This command can only be used in ModMail ticket channels.')
-        .setImage(BANNER_URL)
-        .setFooter({ text: FOOTER_TEXT })
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [wrongChannelEmbed], ephemeral: true });
+    // Check if this is a Defender Support channel
+    if (!interaction.channel.name.startsWith('support-')) {
+      return interaction.reply({
+        content: 'This command can only be used in Defender Support ticket channels.',
+        ephemeral: true
+      });
     }
 
     // Get the server configuration
     const guildConfig = await Config.findOne({ guildId: interaction.guild.id });
+      
     if (!guildConfig) {
       logger.error(`No configuration found for guild ${interaction.guild.id}`);
-      const noConfigEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Error')
-        .setDescription('Bot has not been set up. Please ask an administrator to run the `/setup` command.')
-        .setImage(BANNER_URL)
-        .setFooter({ text: FOOTER_TEXT })
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [noConfigEmbed], ephemeral: true });
+      return interaction.reply({
+        content: 'Error: Bot has not been set up. Please ask an administrator to run the /setup command.',
+        ephemeral: true
+      });
     }
     
-    // Check if user has staff role
-    const hasStaffRole = interaction.member.roles.cache.has(guildConfig.staffRoleId);
-    if (!hasStaffRole) {
-      const noPermsEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Permission Denied')
-        .setDescription(`You do not have permission to close tickets.\nYou need the <@&${guildConfig.staffRoleId}> role.`)
-        .setImage(BANNER_URL)
-        .setFooter({ text: FOOTER_TEXT })
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [noPermsEmbed], ephemeral: true });
+    // Check if user has Support Team role
+    const hasSupportRole = interaction.member.roles.cache.has(guildConfig.staffRoleId);
+    if (!hasSupportRole) {
+      return interaction.reply({
+        content: `You do not have permission to close tickets. You need the <@&${guildConfig.staffRoleId}> role (Support Team).`,
+        ephemeral: true
+      });
     }
 
     // Get the reason if provided
@@ -78,9 +52,12 @@ module.exports = {
       'settings.tickets.closeConfirmation',
       true
     );
+    
+    // Get the configured embed color
+    const embedColor = '#FE9F04'; // Defender Support orange
 
     if (closeConfirmation) {
-      // Confirmation buttons
+      // Create confirmation buttons
       const confirmButton = new ButtonBuilder()
         .setCustomId('confirm_close')
         .setLabel('Close Ticket')
@@ -91,15 +68,17 @@ module.exports = {
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Secondary);
 
-      const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+      const row = new ActionRowBuilder()
+        .addComponents(confirmButton, cancelButton);
 
-      // Confirmation embed
+      // Send confirmation message
       const confirmEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Close Ticket?')
-        .setDescription(`Are you sure you want to close this ticket?\n\n**Reason:** ${reason}`)
-        .setImage(BANNER_URL)
-        .setFooter({ text: `${FOOTER_TEXT} • This confirmation will expire in 30 seconds.` })
+        .setColor(embedColor)
+        .setTitle('❓ Close Ticket?')
+        .setDescription(`Are you sure you want to close this Defender Support ticket?\n\n**Reason:** ${reason}`)
+        .setThumbnail('https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png')
+        .setImage('https://cdn.discordapp.com/attachments/1199051285412990997/1406290016631787530/IMG_2802.png')
+        .setFooter({ text: 'Powered by Defender | If you want a Support Team Supervisor, DM them | Status: Powered by Triple Blocks Corporation • This confirmation will expire in 30 seconds' })
         .setTimestamp();
 
       const response = await interaction.reply({
@@ -108,79 +87,63 @@ module.exports = {
         fetchReply: true
       });
 
-      // Button interaction collector
+      // Create a collector for button interactions
       const filter = i => i.user.id === interaction.user.id;
       try {
         const confirmation = await response.awaitMessageComponent({ filter, time: 30_000 });
         
         if (confirmation.customId === 'confirm_close') {
-          const closingEmbed = new EmbedBuilder()
-            .setColor(ORANGE_COLOR)
-            .setTitle('Closing Ticket...')
-            .setDescription(`Closing this ModMail ticket.\n\n**Reason:** ${reason}`)
-            .setImage(BANNER_URL)
-            .setFooter({ text: FOOTER_TEXT })
-            .setTimestamp();
-
-          await confirmation.update({ embeds: [closingEmbed], components: [] });
+          // Proceed with closing the ticket
+          await confirmation.update({
+            content: 'Closing Defender Support ticket...',
+            embeds: [],
+            components: []
+          });
           
-          const result = await closeTicket(interaction.channel, interaction.client, interaction.user, reason);
+          const result = await closeTicket(
+            interaction.channel, 
+            interaction.client, 
+            interaction.user, 
+            reason
+          );
+          
           if (!result.success) {
-            const errorEmbed = new EmbedBuilder()
-              .setColor(ORANGE_COLOR)
-              .setTitle('Error')
-              .setDescription(`Failed to close ticket: ${result.error}`)
-              .setImage(BANNER_URL)
-              .setFooter({ text: FOOTER_TEXT })
-              .setTimestamp();
-
-            await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.followUp({
+              content: `Error: ${result.error}`,
+              ephemeral: true
+            });
           }
         } else if (confirmation.customId === 'cancel_close') {
-          const cancelEmbed = new EmbedBuilder()
-            .setColor(ORANGE_COLOR)
-            .setTitle('Canceled')
-            .setDescription('Ticket close canceled.')
-            .setImage(BANNER_URL)
-            .setFooter({ text: FOOTER_TEXT })
-            .setTimestamp();
-
-          await confirmation.update({ embeds: [cancelEmbed], components: [] });
+          await confirmation.update({
+            content: 'Ticket close canceled.',
+            embeds: [],
+            components: []
+          });
         }
-      } catch {
-        const timeoutEmbed = new EmbedBuilder()
-          .setColor(ORANGE_COLOR)
-          .setTitle('Timed Out')
-          .setDescription('Ticket close canceled — confirmation timed out.')
-          .setImage(BANNER_URL)
-          .setFooter({ text: FOOTER_TEXT })
-          .setTimestamp();
-
-        await interaction.editReply({ embeds: [timeoutEmbed], components: [] });
+      } catch (error) {
+        // If the user doesn't respond in time
+        await interaction.editReply({
+          content: 'Ticket close canceled - confirmation timed out.',
+          embeds: [],
+          components: []
+        });
       }
     } else {
-      // Direct close without confirmation
-      const closingEmbed = new EmbedBuilder()
-        .setColor(ORANGE_COLOR)
-        .setTitle('Closing Ticket...')
-        .setDescription(`Closing this ModMail ticket.\n\n**Reason:** ${reason}`)
-        .setImage(BANNER_URL)
-        .setFooter({ text: FOOTER_TEXT })
-        .setTimestamp();
-
-      await interaction.reply({ embeds: [closingEmbed] });
+      // If no confirmation required, close the ticket directly
+      await interaction.reply({ content: 'Closing Defender Support ticket...' });
       
-      const result = await closeTicket(interaction.channel, interaction.client, interaction.user, reason);
+      const result = await closeTicket(
+        interaction.channel, 
+        interaction.client, 
+        interaction.user, 
+        reason
+      );
+      
       if (!result.success) {
-        const errorEmbed = new EmbedBuilder()
-          .setColor(ORANGE_COLOR)
-          .setTitle('Error')
-          .setDescription(`Failed to close ticket: ${result.error}`)
-          .setImage(BANNER_URL)
-          .setFooter({ text: FOOTER_TEXT })
-          .setTimestamp();
-
-        await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+        await interaction.followUp({
+          content: `Error: ${result.error}`,
+          ephemeral: true
+        });
       }
     }
   }
